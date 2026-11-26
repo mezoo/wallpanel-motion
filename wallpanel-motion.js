@@ -1,19 +1,21 @@
 /*
- * wallpanel-motion.js — détection de mouvement par caméra pour wallpanel,
- * compatible WebView Android (vidéo visible au lieu de display:none).
- * Ressource dashboard : /local/wallpanel-motion.js?v=1  (type: module)
+ * wallpanel-motion.js - camera motion detection for lovelace-wallpanel,
+ * working in the Android WebView of the Home Assistant Companion app
+ * (visible video element instead of display:none).
+ * Dashboard resource: /local/wallpanel-motion.js?v=1  (type: module)
+ * https://github.com/mezoo/wallpanel-motion - MIT License
  */
 const CFG = {
-  users: ['hallway-tab'],          // utilisateurs HA concernés (nom affiché)
-  facingMode: 'user',              // 'user' = frontale, 'environment' = arrière
-  width: 64, height: 48,           // résolution d'analyse
-  intervalMs: 250,                 // fréquence d'analyse
-  pixelDelta: 25,                  // écart de luminosité (0-255) pour qu'un pixel "change"
-  motionRatio: 0.03,               // part de pixels changés pour déclarer un mouvement (3 %)
-  framesRequired: 2,               // images consécutives au-dessus du seuil
-  entity: 'input_boolean.tablette_mouvement', // '' pour désactiver
-  entityOffDelayMs: 10000,         // repasse à off après 10 s sans mouvement
-  debug: false,                    // aperçu + mesures en bas à droite
+  users: ['hallway-tab'],          // HA users (display name) the module runs for
+  facingMode: 'user',              // 'user' = front camera, 'environment' = rear camera
+  width: 64, height: 48,           // analysis resolution
+  intervalMs: 250,                 // analysis interval
+  pixelDelta: 25,                  // luminance delta (0-255) for a pixel to count as changed
+  motionRatio: 0.03,               // share of changed pixels that means motion (3 %)
+  framesRequired: 2,               // consecutive frames above the threshold
+  entity: 'input_boolean.tablet_movment', // '' to disable
+  entityOffDelayMs: 10000,         // turn the entity off after 10 s without motion
+  debug: false,                    // camera preview + live metrics in the bottom-right corner
 };
 
 const LOG = (...a) => console.info('[wallpanel-motion]', ...a);
@@ -59,7 +61,7 @@ class Motion {
     v.autoplay = true; v.muted = true; v.playsInline = true;
     v.setAttribute('playsinline', '');
     v.width = CFG.width; v.height = CFG.height;
-    // Visible (non display:none) sinon la WebView Android ne fournit pas d'images.
+    // Must stay visible (not display:none), otherwise Android WebView delivers black frames.
     Object.assign(v.style, {
       position: 'fixed', right: '0', bottom: '0', zIndex: '2147483647',
       pointerEvents: 'none',
@@ -88,7 +90,7 @@ class Motion {
 
   async start() {
     this.buildDom();
-    // Le lecteur du diaporama peut mettre notre vidéo en pause : on la relance.
+    // The screensaver slideshow may pause our video: resume it.
     this.video.addEventListener('pause', () => { this.video.play().catch(() => {}); });
     this.restarts = 0;
     this.dark = 0;
@@ -109,10 +111,10 @@ class Motion {
       await this.video.play().catch(e => LOG('play()', e));
       this.prev = null;
       this.dark = 0;
-      LOG('caméra démarrée');
+      LOG('camera started');
     } catch (e) {
-      LOG('erreur caméra', e);
-      if (this.dbg) this.dbg.textContent = 'Caméra: ' + e.name;
+      LOG('camera error', e);
+      if (this.dbg) this.dbg.textContent = 'Camera: ' + e.name;
     } finally {
       this.opening = false;
     }
@@ -120,16 +122,16 @@ class Motion {
 
   restart(reason) {
     this.restarts++;
-    LOG('relance caméra:', reason);
+    LOG('restarting camera:', reason);
     this.openCamera();
   }
 
   tick() {
     if (this.opening) return;
     const track = this.stream && this.stream.getVideoTracks()[0];
-    if (!track || track.readyState === 'ended') { this.restart('flux terminé'); return; }
+    if (!track || track.readyState === 'ended') { this.restart('stream ended'); return; }
     if (this.video.paused) this.video.play().catch(() => {});
-    if (this.video.readyState < 2) { if (this.dbg) this.dbg.textContent = 'attente vidéo…'; return; }
+    if (this.video.readyState < 2) { if (this.dbg) this.dbg.textContent = 'waiting for video...'; return; }
     this.ctx.drawImage(this.video, 0, 0, CFG.width, CFG.height);
     const px = this.ctx.getImageData(0, 0, CFG.width, CFG.height).data;
     const n = CFG.width * CFG.height;
@@ -139,9 +141,9 @@ class Motion {
       const g = (px[i] * 77 + px[i + 1] * 150 + px[i + 2] * 29) >> 8;
       gray[j] = g; sum += g;
     }
-    // Image noire persistante (~2 s) : flux figé, on relance la caméra.
+    // Black image for ~2 s: frozen stream, reopen the camera.
     this.dark = sum / n < 2 ? this.dark + 1 : 0;
-    if (this.dark >= Math.ceil(2000 / CFG.intervalMs)) { this.restart('image noire'); return; }
+    if (this.dark >= Math.ceil(2000 / CFG.intervalMs)) { this.restart('black image'); return; }
     let changed = 0;
     if (this.prev) {
       for (let j = 0; j < n; j++) if (Math.abs(gray[j] - this.prev[j]) > CFG.pixelDelta) changed++;
@@ -154,7 +156,7 @@ class Motion {
     if (this.dbg) {
       this.dbg.textContent =
         `lum ${(sum / n).toFixed(0)}  chg ${(ratio * 100).toFixed(1)}%  r${this.restarts}` +
-        (track.muted ? ' muted' : '') + (motion ? '  MOUVEMENT' : '');
+        (track.muted ? ' muted' : '') + (motion ? '  MOTION' : '');
     }
     if (motion) this.onMotion();
   }
@@ -162,10 +164,10 @@ class Motion {
   onMotion() {
     const wp = wallpanel();
     if (wp) {
-      wp.idleSince = Date.now(); // empêche le démarrage tant qu'il y a du mouvement
+      wp.idleSince = Date.now(); // keep the screensaver from starting while there is motion
       try {
         if (wp.screensaverRunning && wp.screensaverRunning()) {
-          LOG('mouvement → arrêt du diaporama');
+          LOG('motion -> stopping screensaver');
           wp.stopScreensaver(1);
         }
       } catch (e) { LOG('stopScreensaver', e); }
@@ -188,7 +190,7 @@ class Motion {
 (function boot(tries = 0) {
   const hass = getHass();
   if (!hass || !hass.user) { if (tries < 120) setTimeout(() => boot(tries + 1), 500); return; }
-  if (!CFG.users.includes(hass.user.name)) { LOG('inactif pour', hass.user.name); return; }
+  if (!CFG.users.includes(hass.user.name)) { LOG('inactive for user', hass.user.name); return; }
   if (window.__wallpanelMotion) return;
   window.__wallpanelMotion = new Motion();
   window.__wallpanelMotion.start();

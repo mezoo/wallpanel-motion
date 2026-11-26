@@ -20,12 +20,18 @@ Tested on a Samsung Galaxy Tab A (SM-T510, Android 11) with HA Companion 2026.11
 
 ## Installation
 
+### HACS (custom repository)
+
+HACS → ⋮ → **Custom repositories** → URL `https://github.com/mezoo/wallpanel-motion`, type **Dashboard**. Install *Wallpanel Motion*; HACS adds the resource automatically. Then do steps 3 and 4 below.
+
+### Manual
+
 1. Copy `wallpanel-motion.js` to `config/www/`.
 2. Settings → Dashboards → ⋮ → **Resources** → Add resource:
    - URL: `/local/wallpanel-motion.js?v=1`
    - Type: **JavaScript module**
 3. Disable wallpanel's own camera detection, otherwise both compete for the camera: remove every `camera_motion_detection_*` key from the `wallpanel:` config.
-4. Optional: create a toggle helper `input_boolean.tablette_mouvement` (Settings → Devices & services → Helpers).
+4. Optional: create a toggle helper `input_boolean.tablet_movment` (Settings → Devices & services → Helpers).
 
 Bump `?v=` in the resource URL after every update of the file, so the tablet does not keep the old version in cache.
 
@@ -42,7 +48,7 @@ Edit the `CFG` object at the top of the file:
 | `pixelDelta` | `25` | Luminance delta (0-255) for a pixel to count as changed |
 | `motionRatio` | `0.03` | Share of changed pixels that means motion (3 %) |
 | `framesRequired` | `2` | Consecutive frames above the threshold |
-| `entity` | `'input_boolean.tablette_mouvement'` | Toggled on motion, `''` to disable |
+| `entity` | `'input_boolean.tablet_movment'` | Toggled on motion, `''` to disable |
 | `entityOffDelayMs` | `10000` | Turns the entity back off after this delay without motion |
 | `debug` | `false` | Shows the camera preview and live metrics in the bottom-right corner |
 
@@ -52,3 +58,7 @@ Tuning: lower `motionRatio` for more sensitivity; raise `pixelDelta` if lighting
 
 - HTTPS (secure context) is required for camera access.
 - The camera stays on permanently: the tablet gets slightly warmer and should stay plugged in.
+
+## License
+
+MIT
