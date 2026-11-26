@@ -2,14 +2,23 @@
 
 Camera motion detection for [lovelace-wallpanel](https://github.com/j-a-n/lovelace-wallpanel) that works inside the **Home Assistant Android Companion app** (Android WebView).
 
-## Why
+## Try wallpanel's built-in detection first
 
-Wallpanel's built-in `camera_motion_detection_enabled` does not work in the Companion app WebView:
+Wallpanel already includes camera motion detection (`camera_motion_detection_enabled`), and it may work in the Companion app with the right settings:
 
-1. Wallpanel reads the camera through a `<video>` element styled `display: none`. Android WebView delivers **black frames** to a hidden video, so no motion is ever detected.
-2. When the screensaver (slideshow) starts, the WebView **pauses** the camera video.
+- Home Assistant must be served over **HTTPS** (camera access requires a secure context).
+- In the Companion app, enable **Settings → Companion app → Autoplay videos**. Without it, the WebView refuses to start the camera video without a user gesture (`Playback() can only be started by a user gesture`) and wallpanel only gets black frames. See [wallpanel#550](https://github.com/j-a-n/lovelace-wallpanel/issues/550).
 
-This module works around both issues:
+If the built-in detection works for you, you do not need this module.
+
+## Why this module exists
+
+On our test tablet (with autoplay disabled), wallpanel's built-in detection did not work in the Companion app WebView:
+
+1. Wallpanel reads the camera through a hidden `<video>` element (`display: none`) and starts it without a user gesture. The frames it received were **black**, so no motion was ever detected (visible with `camera_motion_detection_capture_visible: true`).
+2. When the screensaver (slideshow) starts, the WebView **pauses** the camera video, and wallpanel does not resume it.
+
+This module does not depend on the autoplay setting and works around both issues:
 
 - the camera video is kept **visible** (2×2 px, opacity 0.01) so the WebView delivers real frames;
 - it calls `play()` again whenever the video gets paused, and reopens the camera if the stream ends or stays black;
